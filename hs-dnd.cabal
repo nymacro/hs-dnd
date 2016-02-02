@@ -20,4 +20,6 @@ executable hs-dnd
                      , mtl
                      , random
                      , lens
+                     , free
                      , text
+                     , gtk3
