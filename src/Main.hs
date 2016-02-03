@@ -1,10 +1,10 @@
-{-# LANGUAGE DeriveGeneric    #-}
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE DeriveGeneric #-}
 module Main where
 
 import           Graphics.UI.Gtk     (AttrOp (..))
 import qualified Graphics.UI.Gtk     as Gtk
 
+import           DnD.Dice
 import           DnD.Player
 
 import           Control.Monad.State
@@ -12,39 +12,6 @@ import           Data.Monoid
 import           System.Random
 
 import           Control.Lens
-import           Control.Monad.Free
-
--- this is broken...
-data Roller next = Lit Int next
-                 | D Int next
-                 | Plus Int next
-                 | Minus Int next
-
-instance Functor Roller where
-  fmap f (Lit n next)   = Lit n (f next)
-  fmap f (D n next)     = D n (f next)
-  fmap f (Plus n next)  = Plus n (f next)
-  fmap f (Minus n next) = Minus n (f next)
-
-lit  n  = liftF (Lit n 0)
-roll n  = liftF (D n 0)
-plus n  = liftF (Plus n 0)
-minus n = liftF (Minus n 0)
-
-run :: Free Roller Int -> IO Int
-run r = do
-  seed <- getStdRandom random
-  return $ run' (mkStdGen seed) r
-
-run' :: StdGen -> Free Roller Int -> Int
-run' g (Pure r) = r
-run' g (Free (Lit n next)) = n + run' g next
-run' g (Free (D n next)) =
-  let (roll, gen) = randomR (1, n) g
-  in roll + run' gen next
-run' g (Free (Plus n next))  = n + run' g next
-run' g (Free (Minus n next)) = run' g next - n
-
 
 makeStatsWidget :: Stats -> IO (Gtk.HBox, [Gtk.Entry]) -- IO ()
 makeStatsWidget stats = do
@@ -79,10 +46,7 @@ main = do
   print p
   print $ modifier (p ^. stats)
 
-  roller <- replicateM 50 $ run $ do
-    lit 10
-    roll 6
-    roll 6
+  roller <- replicateM 50 $ runRoller $ roll 6 >> roll 6 >> plus 10
   print roller
 
   -- Gtk.initGUI

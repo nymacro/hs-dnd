@@ -1,23 +1,33 @@
-{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveGeneric     #-}
+{-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE FlexibleInstances #-}
 module DnD.Dice where
 
-import System.Random
-import Control.Monad.State
+import           Control.Monad.Free
+import           System.Random
 
-type DiceBag = State StdGen Int
+data Roller next = D Int next
+                 | Plus Int next
+                 | Minus Int next
 
-mkDiceBag :: DiceBag
-mkDiceBag = return 0 -- (mkStdGen 0)
+instance Functor Roller where
+  fmap f (D n next)     = D n (f next)
+  fmap f (Plus n next)  = Plus n (f next)
+  fmap f (Minus n next) = Minus n (f next)
 
-roll :: Int -> DiceBag
-roll d = do
-  (n, gen) <- fmap (randomR (1, d)) get
-  put gen
-  return n
+roll n  = liftF (D n 0)
+plus n  = liftF (Plus n 0)
+minus n = liftF (Minus n 0)
 
-rolls :: DiceBag
-rolls = do
-  a <- roll 6
-  b <- roll 6
-  return $ a + b
+runRoller :: Free Roller Int -> IO Int
+runRoller r = do
+  seed <- getStdRandom random
+  return $ runRollerPure (mkStdGen seed) r
+
+runRollerPure :: StdGen -> Free Roller Int -> Int
+runRollerPure g (Pure r) = r
+runRollerPure g (Free (D n next)) =
+  let (roll, gen) = randomR (1, n) g
+  in roll + runRollerPure gen next
+runRollerPure g (Free (Plus n next))  = n + runRollerPure g next
+runRollerPure g (Free (Minus n next)) = runRollerPure g next - n
