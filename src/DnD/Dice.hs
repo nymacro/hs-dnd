@@ -9,6 +9,7 @@ import           System.Random
 data Roller next = D Int next
                  | Plus Int next
                  | Minus Int next
+                 deriving (Show)
 
 instance Functor Roller where
   fmap f (D n next)     = D n (f next)

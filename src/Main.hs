@@ -24,7 +24,9 @@ makeStatsWidget stats = do
                                       , _constitution
                                       , _wisdom
                                       , _charisma ]
-  mapM_ (Gtk.containerAdd box) entries
+  -- mapM_ (Gtk.containerAdd box) entries
+  -- mapM_ (\entry -> Gtk.containerAdd box entry >> Gtk.set entry [ Gtk.entryEditable := False ]) entries
+  forM_ entries $ \entry -> Gtk.containerAdd box entry >> Gtk.set entry [ Gtk.entryEditable := False ]
   return (box, entries)
 
 updateStatsWidget :: Stats -> [Gtk.Entry] -> IO ()
@@ -36,6 +38,13 @@ updateStatsWidget stats entries = do
                                       , _constitution
                                       , _wisdom
                                       , _charisma ]
+
+appendToLog entry content = do
+  buffer <- Gtk.get entry Gtk.textViewBuffer
+  end    <- Gtk.textBufferGetEndIter buffer
+  Gtk.textBufferInsert buffer end $ content <> "\n"
+  Gtk.textViewScrollToIter entry end 0.0 Nothing
+  return ()
 
 main :: IO ()
 main = do
@@ -50,17 +59,19 @@ main = do
   print roller
 
   -- Gtk.initGUI
-  -- window <- Gtk.windowNew
-  -- button <- Gtk.buttonNewWithLabel "Re-roll"
+  -- window   <- Gtk.windowNew
+  -- button   <- Gtk.buttonNewWithLabel "Re-roll"
+  -- logEntry <- Gtk.textViewNew
+  -- Gtk.set logEntry [ Gtk.textViewEditable := False ]
+  -- (statsBox, statsWidgets) <- makeStatsWidget rolls
 
   -- vbox <- Gtk.vBoxNew True 10
-  -- label <- Gtk.labelNew $ Just "Hello"
 
-  -- Gtk.containerAdd vbox label
   -- Gtk.containerAdd vbox button
-
-  -- (statsBox, statsWidgets) <- makeStatsWidget rolls
   -- Gtk.containerAdd vbox statsBox
+  -- Gtk.containerAdd vbox logEntry
+
+  -- appendToLog logEntry $ show p
 
   -- Gtk.set window [ Gtk.windowDefaultWidth := 200
   --                , Gtk.windowDefaultHeight := 200
@@ -71,6 +82,7 @@ main = do
   -- Gtk.on button Gtk.buttonActivated $ do
   --   rolls <- mkStatsRoll
   --   updateStatsWidget rolls statsWidgets
+  --   appendToLog logEntry $ show rolls
 
   -- Gtk.widgetShowAll window
   -- Gtk.mainGUI
