@@ -1,9 +1,15 @@
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TemplateHaskell   #-}
+{-# LANGUAGE DeriveGeneric       #-}
+{-# LANGUAGE FlexibleInstances   #-}
+{-# LANGUAGE OverloadedStrings   #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell     #-}
 module DnD.Player where
 
 import           Control.Lens
 import           Control.Monad
+import           Control.Monad.Free
+import           Control.Monad.Reader
+import           Data.Data
 import           Data.List
 import           Data.Monoid
 import           Data.Text
@@ -47,6 +53,8 @@ data Skills = Skills { _acrobatics     :: Int
 data Race = Race { _raceName :: Text
                  , applyRace :: Player -> Player }
 
+emptyRace = Race "Race" id
+
 data Feat = Feat { _featName   :: Text
                  , featAllowed :: Player -> Bool
                  , applyFeat   :: Player -> Player }
@@ -63,16 +71,58 @@ data Player = Player { _name          :: Text
                      , _xp            :: Int          -- ^ experience points
                      , _hp            :: Int          -- ^ total max HP
                      , _ac            :: Int          -- ^ armor class
+                     , _initiative    :: Int          -- ^ base initiative
                      , _stats         :: Stats
-                     , attackModifier :: Stat         -- ^ modifier to use for attack calculations
+                     , attackModifier :: Stat         -- ^ ability modifier to use for attack calculations
                      , _skills        :: Skills
                      , _spells        :: [Spell]      -- ^ known spells
                      , _levels        :: [LevelClass] -- ^ levels
                      , _feats         :: [Feat] }     -- ^ feats
 
-data Spell = Spell { _spellName  :: Text
-                   , _spellLevel :: Int
-                   , applySpell  :: Player -> Player -> Player }
+type PlayerRollerT = ReaderT Player (Free Roller)
+type PlayerRoller  = PlayerRollerT Int
+runPlayerRoller :: Player -> PlayerRoller -> Int
+runPlayerRoller p r = runRollerPure (mkStdGen 0) $ runReaderT r p
+
+-- this instance of show isn't very correct
+showPlayerRoller :: Player -> PlayerRoller -> String
+showPlayerRoller p r = show $ runReaderT r p
+
+-- instance Show (ReaderT Player (Free Roller) Int) where
+--   show r = show $ runReaderT r $ Player { _name = "Null"
+--                                         , _race = emptyRace
+--                                         , _xp   = 0
+--                                         , _hp   = 0
+--                                         , _ac   = 0
+--                                         , _initiative = 0
+--                                         , _stats = Stats 0 0 0 0 0 0
+--                                         , attackModifier = Strength
+--                                         , _skills = Skills 0 0 0 0 0 0 0 0
+--                                         , _spells = []
+--                                         , _levels = []
+--                                         , _feats  = [] }
+
+data SpellEffect = Target
+                 | MultiTarget PlayerRoller -- ^ Player(caster) -> Int(number of targets)
+                 | Area
+                 | Self
+                 | Aura
+
+data SpellSchool = Abjuration
+                 | Conjuration
+                 | Divination
+                 | Enchantment
+                 | Evocation
+                 | Illusion
+                 | Necromancy
+                 | Transmutation
+                 deriving (Show)
+
+data Spell = Spell { _spellName   :: Text
+                   , _spellSchool :: SpellSchool
+                   , _spellLevel  :: Int
+                   , _spellEffect :: SpellEffect
+                   , applySpell   :: Player -> Player -> Player }
 
 
 makePrisms ''Stat
@@ -84,7 +134,7 @@ makeLenses ''Feat
 makeLenses ''Class
 makeLenses ''LevelClass
 makeLenses ''Race
-
+makeLenses ''Spell
 
 statToLens :: Functor f => Stat -> ((Int -> f Int) -> Stats -> f Stats)
 statToLens Strength = strength
@@ -114,17 +164,46 @@ instance Show Class where
   show x = show $ _className x
 
 instance Show LevelClass where
-  show x = "Level HP: " <> (show $ x ^. levelHp) <> " " <>
-           "Level Stats: " <> (show $ x ^. levelStats) <> " " <>
-           "Level Skills: " <> (show $ x ^. levelSkills) <> " " <>
-           "Level Class" <> (show $ x ^. levelClass)
+  show x = "Level HP: " <> show (x ^. levelHp) <> " " <>
+           "Level Stats: " <> show (x ^. levelStats) <> " " <>
+           "Level Skills: " <> show (x ^. levelSkills) <> " " <>
+           "Level Class" <> show (x ^. levelClass)
 
 instance Show Player where
-  show x = "Name: " <> (show $ x ^. name) <> " " <>
-           "HP: " <> (show $ x ^. hp) <> " " <>
-           "Stats: " <> (show $ x ^. stats) <> " " <>
-           "Skills: " <> (show $ x ^. skills) <> " " <>
-           "Feats: " <> (show $ x ^. feats)
+  show x = show (x ^. name) <> " " <>
+           show (x ^. hp) <> " " <>
+           show (x ^. stats) <> " " <>
+           show (x ^. skills) <> " " <>
+           show (x ^. feats) <> " " <>
+           "[" <> Data.List.foldr (<>) "" (fmap (\z -> showSpell x z <> ", ") (x ^. spells)) <> "]"
+
+-- instance Show SpellEffect where
+--   show x = case x of
+--              Target -> "Target"
+--              MultiTarget _ -> "MultiTarget"
+--              Area -> "Area"
+--              Self -> "Self"
+--              Aura -> "Aura"
+
+showSpellEffect :: Player -> SpellEffect -> String
+showSpellEffect p e = case e of
+                        Target -> "Target"
+                        MultiTarget r -> "MultiTarget " <> showPlayerRoller p r
+                        Area -> "Area"
+                        Self -> "Self"
+                        Aura -> "Aura"
+
+showSpell :: Player -> Spell -> String
+showSpell p s = show (s ^. spellName) <> " " <>
+                show (s ^. spellSchool) <> " " <>
+                show (s ^. spellLevel) <> " " <>
+                showSpellEffect p (s ^. spellEffect)
+
+-- instance Show Spell where
+--   show x = show (x ^. spellName) <> " " <>
+--            show (x ^. spellSchool) <> " " <>
+--            show (x ^. spellLevel) <> " " <>
+--            show (x ^. spellEffect)
 
 mkStats :: Stats
 mkStats = Stats 0 0 0 0 0 0
@@ -146,6 +225,7 @@ mkPlayer = Player { _name   = "Player"
                   , _xp     = 0
                   , _hp     = 4
                   , _ac     = 0
+                  , _initiative = 0
                   , attackModifier = Strength
                   , _stats  = mkStats
                   , _skills = mkSkills
@@ -160,7 +240,9 @@ modifier s = Stats { _strength = m $ s ^. strength
                    , _intelligence = m $ s ^. intelligence
                    , _wisdom = m $ s ^. wisdom
                    , _charisma = m $ s ^. charisma }
-  where m x = (x - 10) `div` 2
+  where m = abilityModifier
+abilityModifier :: Int -> Int
+abilityModifier x = (x - 10) `div` 2
 
 applyRaceBonus :: Player -> Player
 applyRaceBonus p = applyRace (_race p) p
@@ -175,6 +257,12 @@ applyLevels player = Prelude.foldr applyLevel player $ _levels player
 
 applyFeats :: Player -> Player
 applyFeats player = Prelude.foldr applyFeat player $ _feats player
+
+applyAll :: Player -> Player
+applyAll = applyFeats . applyLevels . applyRaceBonus
+
+playerLevel :: Player -> Int
+playerLevel = Data.List.length . _levels
 
 human :: Race
 human = Race "Human" id
@@ -205,23 +293,33 @@ alertness = Feat "Alertness" (const True) $ skills . acrobatics +~ 2
 simpleWeaponProficiency :: Feat
 simpleWeaponProficiency = Feat "Simple Weapon Proficiency" (const True) id
 
--- TODO prereqs
+-- TODO prereqs and real effect
 combatReflexes :: Feat
 combatReflexes = Feat "Combat Reflexes" (const True) $ skills . acrobatics +~ 2
 
+improvedInitiative :: Feat
+improvedInitiative = Feat "Improved Initiative" (const True) $ initiative +~ 2
+
 weaponFinesse :: Feat
 weaponFinesse = Feat "Weapon Finesse" prereq id -- TODO
-  where prereq p = attackBonus p > 2 -- FIXME
+  where prereq p = attackBonus p >= 1 -- FIXME
 
 scribeScroll :: Feat
 scribeScroll = Feat "Scribe Scroll" (const True) id
 
+-- should be caster level that can cast specific spell
+casterLevel :: Player -> Int
+casterLevel p = p ^. DnD.Player.levels ^. to Data.List.length
+
 -- 1d4 + 1 * ((caster_level - 1) / 2)
 -- TODO fix
 magicMissile :: Spell
-magicMissile = Spell "Magic Missile" 1 $ \_ -> hp -~ 1
+magicMissile = Spell "Magic Missile" Evocation 1 (MultiTarget targets) $ \_ -> hp -~ 1
+  where targets = do
+          x <- asks casterLevel
+          plus $ min 5 $ 1 + max 1 ((x - 1) `div` 2)
 
 -- TODO has no "player" effect, find out what to do!
 -- TODO only a level 0 spell for wiz/sor/brd/clr/drd
 readMagic :: Spell
-readMagic = Spell "Read Magic" 0 $ const id
+readMagic = Spell "Read Magic" Divination 0 Self $ const id
