@@ -51,23 +51,23 @@ main :: IO ()
 main = do
   rolls <- mkStatsRoll
   print rolls
-  let player = mkPlayer { _stats = rolls, _race = orc, _levels = [mkLevelClass barbarian] } -- { _feats = [alertness, combatReflexes]}
-  let p = applyAll player
-  print p
-  print $ modifier (p ^. stats)
+  -- let player = mkPlayer { _stats = rolls, _race = orc, _levels = [mkLevelClass barbarian] } -- { _feats = [alertness, combatReflexes]}
+  -- let p = applyAll player
+  -- print p
+  -- print $ modifier (p ^. stats)
 
   let wizardBase = mkPlayer { _name = "Wiz", _stats = rolls, _race = human, _levels = replicate 5 (mkLevelClass wizard), _spells = [magicMissile] }
   let wizard = applyAll wizardBase
   print wizard
 
-  roller <- replicateM 50 $ runRoller $ roll 6 >> roll 6 >> plus 10
-  print roller
+  -- roller <- replicateM 50 $ runRoller $ roll 6 >> roll 6 >> plus 10
+  -- print roller
 
-  let x = runPlayerRoller p $ do
-            roll 6
-            mod <- asks (\x -> abilityModifier $ x ^. stats ^. strength)
-            plus mod
-  print x
+  -- let x = runPlayerRoller p $ do
+  --           roll 6
+  --           mod <- asks (\x -> abilityModifier $ x ^. stats ^. strength)
+  --           plus mod
+  -- print x
 
   -- Gtk.initGUI
   -- window   <- Gtk.windowNew

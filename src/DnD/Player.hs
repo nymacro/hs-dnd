@@ -12,7 +12,7 @@ import           Control.Monad.Reader
 import           Data.Data
 import           Data.List
 import           Data.Monoid
-import           Data.Text
+import           Data.Text            hiding (filter, foldr, length)
 
 import           System.Random
 
@@ -65,6 +65,18 @@ data LevelClass = LevelClass { _levelHp     :: Int
                              , _levelSpells :: [Spell]
                              , _levelClass  :: Class }
 
+data ItemType = Weapon
+              | Cloak
+              deriving (Show)
+
+data Item = Item { _itemType   :: ItemType
+                 , _itemName   :: Text
+                 , _itemDamage :: PlayerRoller }
+
+data Paperdoll = Paperdoll { _mainHand :: Maybe Item
+                           , _offHand  :: Maybe Item
+                           , _back     :: Maybe Item }
+
 -- TODO change attackModifier based on equipped weapon
 data Player = Player { _name          :: Text
                      , _race          :: Race         -- ^ player race
@@ -72,15 +84,17 @@ data Player = Player { _name          :: Text
                      , _hp            :: Int          -- ^ total max HP
                      , _ac            :: Int          -- ^ armor class
                      , _initiative    :: Int          -- ^ base initiative
-                     , _stats         :: Stats
+                     , _stats         :: Stats        -- ^ ability scores
                      , attackModifier :: Stat         -- ^ ability modifier to use for attack calculations
-                     , _skills        :: Skills
+                     , _skills        :: Skills       -- ^ skills
+                     , _equipped      :: Paperdoll    -- ^ all equipped items
                      , _spells        :: [Spell]      -- ^ known spells
                      , _levels        :: [LevelClass] -- ^ levels
                      , _feats         :: [Feat] }     -- ^ feats
 
 type PlayerRollerT = ReaderT Player (Free Roller)
 type PlayerRoller  = PlayerRollerT Int
+
 runPlayerRoller :: Player -> PlayerRoller -> Int
 runPlayerRoller p r = runRollerPure (mkStdGen 0) $ runReaderT r p
 
@@ -135,6 +149,7 @@ makeLenses ''Class
 makeLenses ''LevelClass
 makeLenses ''Race
 makeLenses ''Spell
+makeLenses ''Item
 
 statToLens :: Functor f => Stat -> ((Int -> f Int) -> Stats -> f Stats)
 statToLens Strength = strength
@@ -153,6 +168,7 @@ instance Eq Class where
 
 instance Num Skills where
   a + b = (acrobatics +~ (b ^. acrobatics)) a
+  a - b = (acrobatics -~ (b ^. acrobatics)) a
 
 instance Show Race where
   show x = show $ x ^. raceName
@@ -164,18 +180,24 @@ instance Show Class where
   show x = show $ _className x
 
 instance Show LevelClass where
-  show x = "Level HP: " <> show (x ^. levelHp) <> " " <>
-           "Level Stats: " <> show (x ^. levelStats) <> " " <>
-           "Level Skills: " <> show (x ^. levelSkills) <> " " <>
-           "Level Class" <> show (x ^. levelClass)
+  show x = -- "Level HP: " <> show (x ^. levelHp) <> " " <>
+           -- "Level Stats: " <> show (x ^. levelStats) <> " " <>
+           -- "Level Skills: " <> show (x ^. levelSkills) <> " " <>
+           "Level Class: " <> show (x ^. levelClass)
 
 instance Show Player where
-  show x = show (x ^. name) <> " " <>
-           show (x ^. hp) <> " " <>
-           show (x ^. stats) <> " " <>
-           show (x ^. skills) <> " " <>
-           show (x ^. feats) <> " " <>
-           "[" <> Data.List.foldr (<>) "" (fmap (\z -> showSpell x z <> ", ") (x ^. spells)) <> "]"
+  show x = show (_name x) <> " " <>
+           show (_hp x) <> " " <>
+           show (_stats x) <> " " <>
+           show (_skills x) <> " " <>
+           showPaperdoll x (_equipped x) <> " " <>
+           show (_feats x) <> " " <>
+           show (_levels x) <> " " <>
+           "[" <> foldr (<>) "" (fmap (\z -> showSpell x z <> ", ") (_spells x)) <> "]"
+
+showPaperdoll player p = "Main Hand: " <> showItem player (_mainHand p) <> " " <>
+                         "Off Hand: "  <> showItem player (_offHand p) <> " " <>
+                         "Back: "      <> showItem player (_back p)
 
 -- instance Show SpellEffect where
 --   show x = case x of
@@ -184,6 +206,13 @@ instance Show Player where
 --              Area -> "Area"
 --              Self -> "Self"
 --              Aura -> "Aura"
+
+showItem :: Player -> Maybe Item -> String
+showItem p Nothing  = "Nothing"
+showItem p (Just i) = show (i ^. itemName) <> " " <>
+                      show (i ^. itemType) <> " " <>
+                      showPlayerRoller p (i ^. itemDamage)
+
 
 showSpellEffect :: Player -> SpellEffect -> String
 showSpellEffect p e = case e of
@@ -219,6 +248,9 @@ mkSkills = Skills 0 0 0 0 0 0 0 0
 mkLevelClass :: Class -> LevelClass
 mkLevelClass = LevelClass 0 0 mkSkills []
 
+mkPaperdoll :: Paperdoll
+mkPaperdoll = Paperdoll Nothing Nothing Nothing
+
 mkPlayer :: Player
 mkPlayer = Player { _name   = "Player"
                   , _race   = human
@@ -231,6 +263,7 @@ mkPlayer = Player { _name   = "Player"
                   , _skills = mkSkills
                   , _spells = []
                   , _levels = []
+                  , _equipped = mkPaperdoll
                   , _feats  = [] }
 
 modifier :: Stats -> Modifiers
@@ -262,7 +295,7 @@ applyAll :: Player -> Player
 applyAll = applyFeats . applyLevels . applyRaceBonus
 
 playerLevel :: Player -> Int
-playerLevel = Data.List.length . _levels
+playerLevel = length . _levels
 
 human :: Race
 human = Race "Human" id
@@ -309,7 +342,10 @@ scribeScroll = Feat "Scribe Scroll" (const True) id
 
 -- should be caster level that can cast specific spell
 casterLevel :: Player -> Int
-casterLevel p = p ^. DnD.Player.levels ^. to Data.List.length
+casterLevel p = p ^. DnD.Player.levels ^.. (folded . filtered (isCaster . _levelClass)) ^. to length
+
+isCaster :: Class -> Bool
+isCaster c = c ^. className == "Wizard"
 
 -- 1d4 + 1 * ((caster_level - 1) / 2)
 -- TODO fix
@@ -323,3 +359,6 @@ magicMissile = Spell "Magic Missile" Evocation 1 (MultiTarget targets) $ \_ -> h
 -- TODO only a level 0 spell for wiz/sor/brd/clr/drd
 readMagic :: Spell
 readMagic = Spell "Read Magic" Divination 0 Self $ const id
+
+dagger :: Item
+dagger = Item Weapon "Dagger" $ roll 6
