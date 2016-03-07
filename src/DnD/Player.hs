@@ -53,6 +53,7 @@ data Skills = Skills { _acrobatics     :: Int
 data Race = Race { _raceName :: Text
                  , applyRace :: Player -> Player }
 
+emptyRace :: Race
 emptyRace = Race "Race" id
 
 data Feat = Feat { _featName   :: Text
