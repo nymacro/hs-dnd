@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveGeneric       #-}
 {-# LANGUAGE FlexibleInstances   #-}
 {-# LANGUAGE OverloadedStrings   #-}
+{-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell     #-}
 module DnD.Player where
@@ -9,6 +10,7 @@ import           Control.Lens
 import           Control.Monad
 import           Control.Monad.Free
 import           Control.Monad.Reader
+import           Control.Monad.State
 import           Data.Data
 import           Data.List
 import           Data.Monoid
@@ -17,6 +19,15 @@ import           Data.Text            hiding (filter, foldr, length)
 import           System.Random
 
 import           DnD.Dice
+import           DnD.Game
+
+import           Debug.Trace
+
+-- | Attack type
+data AttackType = AttackOfOpportunity -- ^ attack of opportunity
+                | FullAttack          -- ^ full round action attack
+                | Attack              -- ^ standard action attack
+                deriving (Show, Eq)
 
 data Stats = Stats { _strength     :: Int
                    , _dexterity    :: Int
@@ -72,32 +83,32 @@ data ItemType = Weapon
 
 data Item = Item { _itemType   :: ItemType
                  , _itemName   :: Text
-                 , _itemDamage :: PlayerRoller }
+                 , _itemDamage :: GameState PlayerRollerT Int }
 
 data Paperdoll = Paperdoll { _mainHand :: Maybe Item
                            , _offHand  :: Maybe Item
                            , _back     :: Maybe Item }
 
 -- TODO change attackModifier based on equipped weapon
-data Player = Player { _name          :: Text
-                     , _race          :: Race         -- ^ player race
-                     , _xp            :: Int          -- ^ experience points
-                     , _hp            :: Int          -- ^ total max HP
-                     , _ac            :: Int          -- ^ armor class
-                     , _initiative    :: Int          -- ^ base initiative
-                     , _stats         :: Stats        -- ^ ability scores
-                     , attackModifier :: Stat         -- ^ ability modifier to use for attack calculations
-                     , _skills        :: Skills       -- ^ skills
-                     , _equipped      :: Paperdoll    -- ^ all equipped items
-                     , _spells        :: [Spell]      -- ^ known spells
-                     , _levels        :: [LevelClass] -- ^ levels
-                     , _feats         :: [Feat] }     -- ^ feats
+data Player = Player { _name           :: Text
+                     , _race           :: Race         -- ^ player race
+                     , _xp             :: Int          -- ^ experience points
+                     , _hp             :: Int          -- ^ total max HP
+                     , _ac             :: Int          -- ^ armor class
+                     , _initiative     :: Int          -- ^ base initiative
+                     , _stats          :: Stats        -- ^ ability scores
+                     , _attackModifier :: Stat         -- ^ ability modifier to use for attack calculations
+                     , _skills         :: Skills       -- ^ skills
+                     , _equipped       :: Paperdoll    -- ^ all equipped items
+                     , _spells         :: [Spell]      -- ^ known spells
+                     , _levels         :: [LevelClass] -- ^ levels
+                     , _feats          :: [Feat] }     -- ^ feats
 
 type PlayerRollerT = ReaderT Player (Free Roller)
 type PlayerRoller  = PlayerRollerT Int
 
 runPlayerRoller :: Player -> PlayerRoller -> Int
-runPlayerRoller p r = runRollerPure (mkStdGen 0) $ runReaderT r p
+runPlayerRoller p r = fst $ runRollerPure (mkStdGen 0) $ runReaderT r p
 
 -- this instance of show isn't very correct
 showPlayerRoller :: Player -> PlayerRoller -> String
@@ -111,7 +122,7 @@ showPlayerRoller p r = show $ runReaderT r p
 --                                         , _ac   = 0
 --                                         , _initiative = 0
 --                                         , _stats = Stats 0 0 0 0 0 0
---                                         , attackModifier = Strength
+--                                         , _attackModifier = Strength
 --                                         , _skills = Skills 0 0 0 0 0 0 0 0
 --                                         , _spells = []
 --                                         , _levels = []
@@ -121,7 +132,7 @@ data SpellEffect = Target
                  | MultiTarget PlayerRoller -- ^ Player(caster) -> Int(number of targets)
                  | Area
                  | Self
-                 | Aura
+                 | Aura PlayerRoller
 
 data SpellSchool = Abjuration
                  | Conjuration
@@ -131,13 +142,13 @@ data SpellSchool = Abjuration
                  | Illusion
                  | Necromancy
                  | Transmutation
-                 deriving (Show)
+                 deriving (Show, Eq)
 
 data Spell = Spell { _spellName   :: Text
                    , _spellSchool :: SpellSchool
                    , _spellLevel  :: Int
                    , _spellEffect :: SpellEffect
-                   , applySpell   :: Player -> Player -> Player }
+                   , applySpell   :: Player -> Player -> GameState Identity Player }
 
 
 makePrisms ''Stat
@@ -161,12 +172,13 @@ statToLens Wisdom = wisdom
 statToLens Charisma = charisma
 
 attackBonus :: Player -> Int
-attackBonus p = (modifier $ p ^. stats) ^. statToLens (attackModifier p)
+attackBonus p = (modifier $ p ^. stats) ^. statToLens (_attackModifier p)
 
 instance Eq Class where
   a == b = _className a == _className b &&
           _hitDie a    == _hitDie b
 
+-- TODO find a nice way to do this...
 instance Num Skills where
   a + b = (acrobatics +~ (b ^. acrobatics)) a
   a - b = (acrobatics -~ (b ^. acrobatics)) a
@@ -196,6 +208,7 @@ instance Show Player where
            show (_levels x) <> " " <>
            "[" <> foldr (<>) "" (fmap (\z -> showSpell x z <> ", ") (_spells x)) <> "]"
 
+-- | Show equipped items
 showPaperdoll player p = "Main Hand: " <> showItem player (_mainHand p) <> " " <>
                          "Off Hand: "  <> showItem player (_offHand p) <> " " <>
                          "Back: "      <> showItem player (_back p)
@@ -211,8 +224,8 @@ showPaperdoll player p = "Main Hand: " <> showItem player (_mainHand p) <> " " <
 showItem :: Player -> Maybe Item -> String
 showItem p Nothing  = "Nothing"
 showItem p (Just i) = show (i ^. itemName) <> " " <>
-                      show (i ^. itemType) <> " " <>
-                      showPlayerRoller p (i ^. itemDamage)
+                      show (i ^. itemType) <> " " -- <>
+                      -- showPlayerRoller p (i ^. itemDamage)
 
 
 showSpellEffect :: Player -> SpellEffect -> String
@@ -221,7 +234,7 @@ showSpellEffect p e = case e of
                         MultiTarget r -> "MultiTarget " <> showPlayerRoller p r
                         Area -> "Area"
                         Self -> "Self"
-                        Aura -> "Aura"
+                        Aura _ -> "Aura"
 
 showSpell :: Player -> Spell -> String
 showSpell p s = show (s ^. spellName) <> " " <>
@@ -259,7 +272,7 @@ mkPlayer = Player { _name   = "Player"
                   , _hp     = 4
                   , _ac     = 0
                   , _initiative = 0
-                  , attackModifier = Strength
+                  , _attackModifier = Strength
                   , _stats  = mkStats
                   , _skills = mkSkills
                   , _spells = []
@@ -306,20 +319,6 @@ orc = Race "Orc" $ (stats . strength +~ 2) .
                    (stats . intelligence -~ 2) .
                    (stats . charisma -~ 2)
 
-barbarian :: Class
-barbarian = Class "Barbarian" 12 $ \level ->
-  case level of
-    1 -> (feats <>~ [alertness, combatReflexes]) .
-        (stats . strength +~ 2) -- not real
-    _ -> id
-
-wizard :: Class
-wizard = Class "Wizard" 4 $ \level ->
-  case level of
-    1 -> (spells <>~ [readMagic]) .
-        (feats  <>~ [scribeScroll])
-    _ -> id
-
 alertness :: Feat
 alertness = Feat "Alertness" (const True) $ skills . acrobatics +~ 2
 
@@ -334,32 +333,24 @@ combatReflexes = Feat "Combat Reflexes" (const True) $ skills . acrobatics +~ 2
 improvedInitiative :: Feat
 improvedInitiative = Feat "Improved Initiative" (const True) $ initiative +~ 2
 
+-- FIXME doesn't apply to all weapons
 weaponFinesse :: Feat
-weaponFinesse = Feat "Weapon Finesse" prereq id -- TODO
-  where prereq p = attackBonus p >= 1 -- FIXME
+weaponFinesse = Feat "Weapon Finesse" prereq $ attackModifier .~ Dexterity
+  where prereq p = attackBonus p >= 1
 
 scribeScroll :: Feat
 scribeScroll = Feat "Scribe Scroll" (const True) id
 
 -- should be caster level that can cast specific spell
 casterLevel :: Player -> Int
-casterLevel p = p ^. DnD.Player.levels ^.. (folded . filtered (isCaster . _levelClass)) ^. to length
+casterLevel p = Prelude.length $ filter isCasterLevel $ p ^. DnD.Player.levels
 
 isCaster :: Class -> Bool
 isCaster c = c ^. className == "Wizard"
 
--- 1d4 + 1 * ((caster_level - 1) / 2)
--- TODO fix
-magicMissile :: Spell
-magicMissile = Spell "Magic Missile" Evocation 1 (MultiTarget targets) $ \_ -> hp -~ 1
-  where targets = do
-          x <- asks casterLevel
-          plus $ min 5 $ 1 + max 1 ((x - 1) `div` 2)
-
--- TODO has no "player" effect, find out what to do!
--- TODO only a level 0 spell for wiz/sor/brd/clr/drd
-readMagic :: Spell
-readMagic = Spell "Read Magic" Divination 0 Self $ const id
+isCasterLevel :: LevelClass -> Bool
+isCasterLevel = isCaster . _levelClass
 
 dagger :: Item
 dagger = Item Weapon "Dagger" $ roll 6
+

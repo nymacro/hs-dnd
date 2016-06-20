@@ -23,12 +23,15 @@ minus n = liftF (Minus n 0)
 runRoller :: Free Roller Int -> IO Int
 runRoller r = do
   seed <- getStdRandom random
-  return $ runRollerPure (mkStdGen seed) r
+  return $ fst $ runRollerPure (mkStdGen seed) r
 
-runRollerPure :: StdGen -> Free Roller Int -> Int
-runRollerPure g (Pure r) = r
+runRollerPure :: StdGen -> Free Roller Int -> (Int, StdGen)
+runRollerPure g (Pure r) = (r, g)
 runRollerPure g (Free (D n next)) =
-  let (roll, gen) = randomR (1, n) g
-  in roll + runRollerPure gen next
-runRollerPure g (Free (Plus n next))  = n + runRollerPure g next
-runRollerPure g (Free (Minus n next)) = runRollerPure g next - n
+  let (roll, gen)   = randomR (1, n) g
+      (roll', gen') = runRollerPure gen next
+  in (roll + roll', gen')
+runRollerPure g (Free (Plus n next))  = let (roll, gen) = runRollerPure g next
+                                        in (n + roll, gen)
+runRollerPure g (Free (Minus n next)) = let (roll, gen) = runRollerPure g next
+                                        in (roll - n, gen)

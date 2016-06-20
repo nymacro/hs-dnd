@@ -4,12 +4,16 @@ module Main where
 import           Graphics.UI.Gtk      (AttrOp (..))
 import qualified Graphics.UI.Gtk      as Gtk
 
+import           DnD.Arcane
+import           DnD.Class
 import           DnD.Dice
+import           DnD.Game
 import           DnD.Player
 
 import           Control.Monad.Reader
 import           Control.Monad.State
 import           Data.Monoid
+import           Data.Text            (Text)
 import           System.Random
 
 import           Control.Lens
@@ -25,8 +29,6 @@ makeStatsWidget stats = do
                                       , _constitution
                                       , _wisdom
                                       , _charisma ]
-  -- mapM_ (Gtk.containerAdd box) entries
-  -- mapM_ (\entry -> Gtk.containerAdd box entry >> Gtk.set entry [ Gtk.entryEditable := False ]) entries
   forM_ entries $ \entry -> Gtk.containerAdd box entry >> Gtk.set entry [ Gtk.entryEditable := False ]
   return (box, entries)
 
@@ -49,19 +51,31 @@ appendToLog entry content = do
 
 main :: IO ()
 main = do
-  rolls <- mkStatsRoll
+  rolls  <- mkStatsRoll
+  rolls2 <- mkStatsRoll
   print rolls
-  -- let player = mkPlayer { _stats = rolls, _race = orc, _levels = [mkLevelClass barbarian] } -- { _feats = [alertness, combatReflexes]}
-  -- let p = applyAll player
-  -- print p
-  -- print $ modifier (p ^. stats)
 
-  let wizardBase = mkPlayer { _name = "Wiz", _stats = rolls, _race = human, _levels = replicate 5 (mkLevelClass wizard), _spells = [magicMissile] }
-  let wizard = applyAll wizardBase
-  print wizard
+  let wizardBase = mkPlayer { _name = "Wiz"
+                            , _stats = rolls
+                            , _race = human
+                            , _levels = replicate 5 (mkLevelClass wizard)
+                            , _spells = [magicMissile] }
+      barbBase   = mkPlayer { _name = "Barb"
+                            , _stats = rolls2
+                            , _race = orc
+                            , _levels = replicate 4 (mkLevelClass barbarian)
+                            , _spells = [] }
+      wiz  = applyAll wizardBase
+      barb = applyAll barbBase
+  print wiz
+  print barb
 
-  -- roller <- replicateM 50 $ runRoller $ roll 6 >> roll 6 >> plus 10
-  -- print roller
+  gen <- newStdGen
+  let (barb', gen') = runIdentity $ runGameState gen $ applySpell magicMissile wiz barb
+  print barb'
+
+  roller <- replicateM 50 $ runRoller $ roll 6 >> roll 6 >> plus 10
+  print roller
 
   -- let x = runPlayerRoller p $ do
   --           roll 6
@@ -71,9 +85,11 @@ main = do
 
   -- Gtk.initGUI
   -- window   <- Gtk.windowNew
-  -- button   <- Gtk.buttonNewWithLabel "Re-roll"
+  -- Gtk.windowSetDefaultSize window 800 600
+  -- button   <- Gtk.buttonNewWithLabel ("Re-roll" :: Text)
   -- logEntry <- Gtk.textViewNew
-  -- Gtk.set logEntry [ Gtk.textViewEditable := False ]
+  -- Gtk.set logEntry [ Gtk.textViewEditable := False
+  --                  , Gtk.textViewWrapMode := Gtk.WrapWord ]
   -- (statsBox, statsWidgets) <- makeStatsWidget rolls
 
   -- vbox <- Gtk.vBoxNew True 10
