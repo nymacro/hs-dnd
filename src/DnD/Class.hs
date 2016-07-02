@@ -1,7 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 module DnD.Class where
 
-import           DnD.Arcane
+import           DnD.Feat
+import           DnD.Magic.Arcane
 import           DnD.Player
 
 import           Control.Lens

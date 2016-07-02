@@ -4,11 +4,13 @@ module Main where
 import           Graphics.UI.Gtk      (AttrOp (..))
 import qualified Graphics.UI.Gtk      as Gtk
 
-import           DnD.Arcane
 import           DnD.Class
+import           DnD.Default
 import           DnD.Dice
 import           DnD.Game
+import           DnD.Magic.Arcane
 import           DnD.Player
+import           DnD.Race
 
 import           Control.Monad.Reader
 import           Control.Monad.State
@@ -71,7 +73,7 @@ main = do
   print barb
 
   gen <- newStdGen
-  let (barb', gen') = runIdentity $ runGameState gen $ applySpell magicMissile wiz barb
+  let (barb', gen') = runIdentity $ runGameState gen $ castSpell magicMissile wiz barb
   print barb'
 
   roller <- replicateM 50 $ runRoller $ roll 6 >> roll 6 >> plus 10

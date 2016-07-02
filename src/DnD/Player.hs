@@ -1,12 +1,13 @@
 {-# LANGUAGE DeriveGeneric       #-}
 {-# LANGUAGE FlexibleInstances   #-}
 {-# LANGUAGE OverloadedStrings   #-}
+{-# LANGUAGE Rank2Types          #-}
 {-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell     #-}
 module DnD.Player where
 
-import           Control.Lens
+import           Control.Lens         hiding (levels)
 import           Control.Monad
 import           Control.Monad.Free
 import           Control.Monad.Reader
@@ -45,11 +46,13 @@ data Stat = Strength
           | Charisma
           deriving (Show, Eq)
 
+
+-- | Ability modifiers
 type Modifiers = Stats
 
-data Class = Class { _className :: Text
-                   , _hitDie    :: Int
-                   , applyClass :: Int -> Player -> Player }
+data Class = Class { _className :: Text                    -- ^ class name
+                   , _hitDie    :: Int                     -- ^ hit-die of the class (e.g. D4)
+                   , applyClass :: Int -> Player -> Player } -- ^ class's properties
 
 data Skills = Skills { _acrobatics     :: Int
                      , _animalHandling :: Int
@@ -61,29 +64,41 @@ data Skills = Skills { _acrobatics     :: Int
                      , _intimidation   :: Int }
               deriving (Show)
 
-data Race = Race { _raceName :: Text
-                 , applyRace :: Player -> Player }
+data Race = Race { _raceName :: Text              -- ^ race's name
+                 , applyRace :: Player -> Player } -- ^ race's properties
 
 emptyRace :: Race
 emptyRace = Race "Race" id
 
-data Feat = Feat { _featName   :: Text
-                 , featAllowed :: Player -> Bool
-                 , applyFeat   :: Player -> Player }
+data Feat = Feat { _featName   :: Text              -- ^ feat's name
+                 , featAllowed :: Player -> Bool     -- ^ feat prerequisite
+                 , applyFeat   :: Player -> Player } -- ^ feat's effect on a player
 
-data LevelClass = LevelClass { _levelHp     :: Int
-                             , _levelStats  :: Int
-                             , _levelSkills :: Skills
-                             , _levelSpells :: [Spell]
-                             , _levelClass  :: Class }
+data WeaponType = Dagger
+                | Sword
+                | Axe
+                | Kama
+                deriving (Show)
 
-data ItemType = Weapon
+data ItemType = Weapon WeaponType
+              | Chest
+              | Gloves
+              | Boots
               | Cloak
+              | Ring
+              | Amulet
+              | Ammunition
               deriving (Show)
 
-data Item = Item { _itemType   :: ItemType
-                 , _itemName   :: Text
-                 , _itemDamage :: GameState PlayerRollerT Int }
+data Item = Item { _itemType :: ItemType                       -- ^ item's type
+                 , _itemName :: Text                           -- ^ item's name
+                 , _itemUse  :: GameStateT PlayerRollerT Int } -- ^ item's effect
+
+data LevelClass = LevelClass { _levelHp     :: Int     -- ^ HP increase from level gain
+                             , _levelStats  :: Int     -- ^ Stats increased from level gain
+                             , _levelSkills :: Skills  -- ^ Skills increased by level gain
+                             , _levelSpells :: [Spell] -- ^ Spells learnt by level gain
+                             , _levelClass  :: Class } -- ^ Class leveled
 
 data Paperdoll = Paperdoll { _mainHand :: Maybe Item
                            , _offHand  :: Maybe Item
@@ -110,23 +125,8 @@ type PlayerRoller  = PlayerRollerT Int
 runPlayerRoller :: Player -> PlayerRoller -> Int
 runPlayerRoller p r = fst $ runRollerPure (mkStdGen 0) $ runReaderT r p
 
--- this instance of show isn't very correct
 showPlayerRoller :: Player -> PlayerRoller -> String
 showPlayerRoller p r = show $ runReaderT r p
-
--- instance Show (ReaderT Player (Free Roller) Int) where
---   show r = show $ runReaderT r $ Player { _name = "Null"
---                                         , _race = emptyRace
---                                         , _xp   = 0
---                                         , _hp   = 0
---                                         , _ac   = 0
---                                         , _initiative = 0
---                                         , _stats = Stats 0 0 0 0 0 0
---                                         , _attackModifier = Strength
---                                         , _skills = Skills 0 0 0 0 0 0 0 0
---                                         , _spells = []
---                                         , _levels = []
---                                         , _feats  = [] }
 
 data SpellEffect = Target
                  | MultiTarget PlayerRoller -- ^ Player(caster) -> Int(number of targets)
@@ -148,7 +148,7 @@ data Spell = Spell { _spellName   :: Text
                    , _spellSchool :: SpellSchool
                    , _spellLevel  :: Int
                    , _spellEffect :: SpellEffect
-                   , applySpell   :: Player -> Player -> GameState Identity Player }
+                   , applySpell   :: Player -> Player -> GameStateT Identity Player }
 
 
 makePrisms ''Stat
@@ -163,7 +163,7 @@ makeLenses ''Race
 makeLenses ''Spell
 makeLenses ''Item
 
-statToLens :: Functor f => Stat -> ((Int -> f Int) -> Stats -> f Stats)
+statToLens :: Stat -> Getter Stats Int
 statToLens Strength = strength
 statToLens Dexterity = dexterity
 statToLens Constitution = constitution
@@ -171,6 +171,7 @@ statToLens Intelligence = intelligence
 statToLens Wisdom = wisdom
 statToLens Charisma = charisma
 
+-- | Get attack bonus for the specified player
 attackBonus :: Player -> Int
 attackBonus p = (modifier $ p ^. stats) ^. statToLens (_attackModifier p)
 
@@ -248,48 +249,19 @@ showSpell p s = show (s ^. spellName) <> " " <>
 --            show (x ^. spellLevel) <> " " <>
 --            show (x ^. spellEffect)
 
-mkStats :: Stats
-mkStats = Stats 0 0 0 0 0 0
-
-mkStatsRoll :: IO Stats
-mkStatsRoll = Stats <$> mkStat <*> mkStat <*> mkStat <*> mkStat <*> mkStat <*> mkStat
-  -- take sum of highest 3 of 4 D6 rolls
-  where mkStat = sum <$> Prelude.drop 1 <$> sort <$> replicateM 4 (randomRIO (1, 6) :: IO Int)
-
-mkSkills :: Skills
-mkSkills = Skills 0 0 0 0 0 0 0 0
-
-mkLevelClass :: Class -> LevelClass
-mkLevelClass = LevelClass 0 0 mkSkills []
-
-mkPaperdoll :: Paperdoll
-mkPaperdoll = Paperdoll Nothing Nothing Nothing
-
-mkPlayer :: Player
-mkPlayer = Player { _name   = "Player"
-                  , _race   = human
-                  , _xp     = 0
-                  , _hp     = 4
-                  , _ac     = 0
-                  , _initiative = 0
-                  , _attackModifier = Strength
-                  , _stats  = mkStats
-                  , _skills = mkSkills
-                  , _spells = []
-                  , _levels = []
-                  , _equipped = mkPaperdoll
-                  , _feats  = [] }
-
 modifier :: Stats -> Modifiers
-modifier s = Stats { _strength = m $ s ^. strength
-                   , _dexterity = m $ s ^. dexterity
+modifier s = Stats { _strength     = m $ s ^. strength
+                   , _dexterity    = m $ s ^. dexterity
                    , _constitution = m $ s ^. constitution
                    , _intelligence = m $ s ^. intelligence
-                   , _wisdom = m $ s ^. wisdom
-                   , _charisma = m $ s ^. charisma }
+                   , _wisdom       = m $ s ^. wisdom
+                   , _charisma     = m $ s ^. charisma }
   where m = abilityModifier
 abilityModifier :: Int -> Int
 abilityModifier x = (x - 10) `div` 2
+
+modifierFor :: Getter Stats Int -> Stats -> Int
+modifierFor g s = abilityModifier $ s ^. g
 
 applyRaceBonus :: Player -> Player
 applyRaceBonus p = applyRace (_race p) p
@@ -311,46 +283,36 @@ applyAll = applyFeats . applyLevels . applyRaceBonus
 playerLevel :: Player -> Int
 playerLevel = length . _levels
 
-human :: Race
-human = Race "Human" id
 
-orc :: Race
-orc = Race "Orc" $ (stats . strength +~ 2) .
-                   (stats . intelligence -~ 2) .
-                   (stats . charisma -~ 2)
+casterLevel, arcaneLevel, divineLevel :: Player -> Int
 
-alertness :: Feat
-alertness = Feat "Alertness" (const True) $ skills . acrobatics +~ 2
+-- | Number of levels in classes which can use magic
+casterLevel p = Prelude.length $ filter isCasterLevel $ p ^. levels
 
--- how to do this???
-simpleWeaponProficiency :: Feat
-simpleWeaponProficiency = Feat "Simple Weapon Proficiency" (const True) id
+-- | Number of levels in classes with Arcane magic
+arcaneLevel p = Prelude.length $ filter isArcaneCasterLevel $ p ^. levels
 
--- TODO prereqs and real effect
-combatReflexes :: Feat
-combatReflexes = Feat "Combat Reflexes" (const True) $ skills . acrobatics +~ 2
+-- | Number of levels in classes with Divine magic
+divineLevel p = Prelude.length $ filter isDivineCasterLevel $ p ^. levels
 
-improvedInitiative :: Feat
-improvedInitiative = Feat "Improved Initiative" (const True) $ initiative +~ 2
+-- These are somewhat hardcoded and rely on specific instances of a class...
+-- There is probably a better way to do this
+isArcaneCaster, isDivineCaster, isCaster :: Class -> Bool
+isArcaneCaster c = cn == "Wizard" || cn == "Sorcerer" || cn == "Bard"
+  where cn = c ^. className
 
--- FIXME doesn't apply to all weapons
-weaponFinesse :: Feat
-weaponFinesse = Feat "Weapon Finesse" prereq $ attackModifier .~ Dexterity
-  where prereq p = attackBonus p >= 1
+isDivineCaster c = cn == "Cleric" || cn == "Druid"
+  where cn = c ^. className
 
-scribeScroll :: Feat
-scribeScroll = Feat "Scribe Scroll" (const True) id
+isCaster c = isArcaneCaster c || isDivineCaster c
 
--- should be caster level that can cast specific spell
-casterLevel :: Player -> Int
-casterLevel p = Prelude.length $ filter isCasterLevel $ p ^. DnD.Player.levels
+isLevel :: (Class -> Bool) -> LevelClass -> Bool
+isLevel f = f . _levelClass
 
-isCaster :: Class -> Bool
-isCaster c = c ^. className == "Wizard"
+isCasterLevel, isArcaneCasterLevel, isDivineCasterLevel :: LevelClass -> Bool
+isCasterLevel       = isLevel isCaster
+isArcaneCasterLevel = isLevel isArcaneCaster
+isDivineCasterLevel = isLevel isDivineCaster
 
-isCasterLevel :: LevelClass -> Bool
-isCasterLevel = isCaster . _levelClass
-
-dagger :: Item
-dagger = Item Weapon "Dagger" $ roll 6
-
+castSpell :: Spell -> Player -> Player -> GameStateT Identity Player
+castSpell = applySpell

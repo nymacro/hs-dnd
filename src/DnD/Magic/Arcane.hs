@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-module DnD.Arcane where
+module DnD.Magic.Arcane where
 
 import           DnD.Dice
 import           DnD.Game
