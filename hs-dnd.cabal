@@ -22,4 +22,4 @@ executable hs-dnd
                      , lens
                      , free
                      , text
-                     , gtk3
+                     -- , gtk3

@@ -74,10 +74,72 @@ data Feat = Feat { _featName   :: Text              -- ^ feat's name
                  , featAllowed :: Player -> Bool     -- ^ feat prerequisite
                  , applyFeat   :: Player -> Player } -- ^ feat's effect on a player
 
-data WeaponType = Dagger
-                | Sword
-                | Axe
-                | Kama
+data WeaponCategory = Simple
+                    | Martial
+                    | Exotic
+                    deriving (Show)
+
+data WeaponSubCategory = Unarmed
+                       | Light
+                       | OneHanded
+                       | TwoHanded
+                       | Ranged
+                       deriving (Show)
+
+-- TODO martial/exotic
+data WeaponType = Gauntlet      -- ^ Simple Unarmed
+                | UnarmedStrike -- ^ Simple Unarmed
+                | Dagger        -- ^ Simple Light
+                | MaceLight     -- ^ Simple Light
+                | Sickle        -- ^ Simple Light
+                | Club          -- ^ Simple OneHanded
+                | MaceHeavy     -- ^ Simple OneHanded
+                | MorningStar   -- ^ Simple OneHanded
+                | ShortSpear    -- ^ Simple OneHanded
+                | LongSpear     -- ^ Simple TwoHanded
+                | Quarterstaff  -- ^ Simple TwoHanded
+                | Spear         -- ^ Simple TwoHanded
+                | CrossbowHeavy -- ^ Simple Ranged
+                | CrossbowLight -- ^ Simple Ranged
+                | Dart          -- ^ Simple Ranged
+                | Javelin       -- ^ Simple Ranged
+                | Sling         -- ^ Simple Ranged
+                | AxeThrown     -- ^ Martial Light
+                | HammerLight   -- ^ Martial Light
+                | Handaxe       -- ^ Martial Light
+                | Kukri         -- ^ Martial Light
+                | PickLight     -- ^ Martial Light
+                | Sap           -- ^ Martial Light
+                | ShieldLight   -- ^ Martial Light
+                | SpikedArmor   -- ^ Martial Light
+                | SpikedShirt   -- ^ Martial Light
+                | SwordShort    -- ^ Martial Light
+                | Battleaxe     -- ^ Martial OneHanded
+                | Flail         -- ^ Martial OneHanded
+                | Longsword     -- ^ Martial OneHanded
+                | PickHeavy     -- ^ Martial OneHanded
+                | Rapier        -- ^ Martial OneHanded
+                | Scimitar      -- ^ Martial OneHanded
+                | ShieldHeavy   -- ^ Martial OneHanded
+                | SpikedShieldHeavy -- ^ Martial OneHanded
+                | Trident       -- ^ Martial OneHanded
+                | Warhammer     -- ^ Martial OneHanded
+                | Falchion      -- ^ Martial TwoHanded
+                | Glaive        -- ^ Martial TwoHanded
+                | Greataxe      -- ^ Martial TwoHanded
+                | Greatclub     -- ^ Martial TwoHanded
+                | FlailHeavy    -- ^ Martial TwoHanded
+                | Greatsword    -- ^ Martial TwoHanded
+                | Guisarme      -- ^ Martial TwoHanded
+                | Halberd       -- ^ Martial TwoHanded
+                | Lance         -- ^ Martial TwoHanded
+                | Ranseur       -- ^ Martial TwoHanded
+                | Scythe        -- ^ Martial TwoHanded
+                | Longbow       -- ^ Martial Ranged
+                | LongbowComposite -- ^ Martial Ranged
+                | Shortbow      -- ^ Martial Ranged
+                | ShortbowComposite -- ^ Martial Ranged
+                | Kama          -- ^ Exotic Light
                 deriving (Show)
 
 data ItemType = Weapon WeaponType
@@ -100,6 +162,8 @@ data LevelClass = LevelClass { _levelHp     :: Int     -- ^ HP increase from lev
                              , _levelSpells :: [Spell] -- ^ Spells learnt by level gain
                              , _levelClass  :: Class } -- ^ Class leveled
 
+-- | Equipped items on a being.
+-- Terminology borroed from Ultima
 data Paperdoll = Paperdoll { _mainHand :: Maybe Item
                            , _offHand  :: Maybe Item
                            , _back     :: Maybe Item }
@@ -152,6 +216,8 @@ data Spell = Spell { _spellName   :: Text
 
 
 makePrisms ''Stat
+makePrisms ''ItemType
+makePrisms ''WeaponType
 
 makeLenses ''Player
 makeLenses ''Skills
@@ -162,6 +228,7 @@ makeLenses ''LevelClass
 makeLenses ''Race
 makeLenses ''Spell
 makeLenses ''Item
+makeLenses ''Paperdoll
 
 statToLens :: Stat -> Getter Stats Int
 statToLens Strength = strength
@@ -287,13 +354,13 @@ playerLevel = length . _levels
 casterLevel, arcaneLevel, divineLevel :: Player -> Int
 
 -- | Number of levels in classes which can use magic
-casterLevel p = Prelude.length $ filter isCasterLevel $ p ^. levels
+casterLevel p = length $ filter isCasterLevel $ p ^. levels
 
 -- | Number of levels in classes with Arcane magic
-arcaneLevel p = Prelude.length $ filter isArcaneCasterLevel $ p ^. levels
+arcaneLevel p = length $ filter isArcaneCasterLevel $ p ^. levels
 
 -- | Number of levels in classes with Divine magic
-divineLevel p = Prelude.length $ filter isDivineCasterLevel $ p ^. levels
+divineLevel p = length $ filter isDivineCasterLevel $ p ^. levels
 
 -- These are somewhat hardcoded and rely on specific instances of a class...
 -- There is probably a better way to do this

@@ -1,8 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
 
-import           Graphics.UI.Gtk      (AttrOp (..))
-import qualified Graphics.UI.Gtk      as Gtk
+-- import           Graphics.UI.Gtk      (AttrOp (..))
+-- import qualified Graphics.UI.Gtk      as Gtk
 
 import           DnD.Class
 import           DnD.Default
@@ -20,36 +20,36 @@ import           System.Random
 
 import           Control.Lens
 
-makeStatsWidget :: Stats -> IO (Gtk.HBox, [Gtk.Entry]) -- IO ()
-makeStatsWidget stats = do
-  box <- Gtk.hBoxNew True 10
-  entries <- replicateM 6 Gtk.entryNew
-  let makeEntryWithStat entry f = Gtk.entrySetText entry $ show $ f stats
-  zipWithM_ makeEntryWithStat entries [ _strength
-                                      , _dexterity
-                                      , _intelligence
-                                      , _constitution
-                                      , _wisdom
-                                      , _charisma ]
-  forM_ entries $ \entry -> Gtk.containerAdd box entry >> Gtk.set entry [ Gtk.entryEditable := False ]
-  return (box, entries)
+-- makeStatsWidget :: Stats -> IO (Gtk.HBox, [Gtk.Entry]) -- IO ()
+-- makeStatsWidget stats = do
+--   box <- Gtk.hBoxNew True 10
+--   entries <- replicateM 6 Gtk.entryNew
+--   let makeEntryWithStat entry f = Gtk.entrySetText entry $ show $ f stats
+--   zipWithM_ makeEntryWithStat entries [ _strength
+--                                       , _dexterity
+--                                       , _intelligence
+--                                       , _constitution
+--                                       , _wisdom
+--                                       , _charisma ]
+--   forM_ entries $ \entry -> Gtk.containerAdd box entry >> Gtk.set entry [ Gtk.entryEditable := False ]
+--   return (box, entries)
 
-updateStatsWidget :: Stats -> [Gtk.Entry] -> IO ()
-updateStatsWidget stats entries = do
-  let makeEntryWithStat entry f = Gtk.entrySetText entry $ show $ f stats
-  zipWithM_ makeEntryWithStat entries [ _strength
-                                      , _dexterity
-                                      , _intelligence
-                                      , _constitution
-                                      , _wisdom
-                                      , _charisma ]
+-- updateStatsWidget :: Stats -> [Gtk.Entry] -> IO ()
+-- updateStatsWidget stats entries = do
+--   let makeEntryWithStat entry f = Gtk.entrySetText entry $ show $ f stats
+--   zipWithM_ makeEntryWithStat entries [ _strength
+--                                       , _dexterity
+--                                       , _intelligence
+--                                       , _constitution
+--                                       , _wisdom
+--                                       , _charisma ]
 
-appendToLog entry content = do
-  buffer <- Gtk.get entry Gtk.textViewBuffer
-  end    <- Gtk.textBufferGetEndIter buffer
-  Gtk.textBufferInsert buffer end $ content <> "\n"
-  Gtk.textViewScrollToIter entry end 0.0 Nothing
-  return ()
+-- appendToLog entry content = do
+--   buffer <- Gtk.get entry Gtk.textViewBuffer
+--   end    <- Gtk.textBufferGetEndIter buffer
+--   Gtk.textBufferInsert buffer end $ content <> "\n"
+--   Gtk.textViewScrollToIter entry end 0.0 Nothing
+--   return ()
 
 main :: IO ()
 main = do
