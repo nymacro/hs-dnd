@@ -38,4 +38,5 @@ mkPlayer = Player { _name   = "Player"
                   , _spells = []
                   , _levels = []
                   , _equipped = mkPaperdoll
-                  , _feats  = [] }
+                  , _feats  = []
+                  , _proficiencies = [] }

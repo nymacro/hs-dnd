@@ -70,9 +70,14 @@ data Race = Race { _raceName :: Text              -- ^ race's name
 emptyRace :: Race
 emptyRace = Race "Race" id
 
-data Feat = Feat { _featName   :: Text              -- ^ feat's name
+data Feat = Feat { _featName   :: Text               -- ^ feat's name
                  , featAllowed :: Player -> Bool     -- ^ feat prerequisite
                  , applyFeat   :: Player -> Player } -- ^ feat's effect on a player
+
+hasFeatName :: Text -> Player -> Bool
+hasFeatName featName player = not $ Data.List.null $ filter (\x -> _featName x == featName) (_feats player)
+
+type Proficiency = Item -> Bool
 
 data WeaponCategory = Simple
                     | Martial
@@ -142,8 +147,75 @@ data WeaponType = Gauntlet      -- ^ Simple Unarmed
                 | Kama          -- ^ Exotic Light
                 deriving (Show)
 
+isShield :: WeaponType -> Bool
+isShield ShieldLight       = True
+isShield ShieldHeavy       = True
+isShield SpikedShieldHeavy = True
+isShield _                 = False
+
+-- TODO: have this automatically generated somehow...
+weaponCategory :: WeaponType -> (WeaponCategory, WeaponSubCategory)
+weaponCategory Gauntlet          = (Simple, Unarmed)
+weaponCategory UnarmedStrike     = (Simple, Unarmed)
+weaponCategory Dagger            = (Simple, Light)
+weaponCategory MaceLight         = (Simple, Light)
+weaponCategory Sickle            = (Simple, Light)
+weaponCategory Club              = (Simple, OneHanded)
+weaponCategory MaceHeavy         = (Simple, OneHanded)
+weaponCategory MorningStar       = (Simple, OneHanded)
+weaponCategory ShortSpear        = (Simple, OneHanded)
+weaponCategory LongSpear         = (Simple, TwoHanded)
+weaponCategory Quarterstaff      = (Simple, TwoHanded)
+weaponCategory Spear             = (Simple, TwoHanded)
+weaponCategory CrossbowHeavy     = (Simple, Ranged)
+weaponCategory CrossbowLight     = (Simple, Ranged)
+weaponCategory Dart              = (Simple, Ranged)
+weaponCategory Javelin           = (Simple, Ranged)
+weaponCategory Sling             = (Simple, Ranged)
+weaponCategory AxeThrown         = (Martial, Light)
+weaponCategory HammerLight       = (Martial, Light)
+weaponCategory Handaxe           = (Martial, Light)
+weaponCategory Kukri             = (Martial, Light)
+weaponCategory PickLight         = (Martial, Light)
+weaponCategory Sap               = (Martial, Light)
+weaponCategory ShieldLight       = (Martial, Light)
+weaponCategory SpikedArmor       = (Martial, Light)
+weaponCategory SpikedShirt       = (Martial, Light)
+weaponCategory SwordShort        = (Martial, Light)
+weaponCategory Battleaxe         = (Martial, OneHanded)
+weaponCategory Flail             = (Martial, OneHanded)
+weaponCategory Longsword         = (Martial, OneHanded)
+weaponCategory PickHeavy         = (Martial, OneHanded)
+weaponCategory Rapier            = (Martial, OneHanded)
+weaponCategory Scimitar          = (Martial, OneHanded)
+weaponCategory ShieldHeavy       = (Martial, OneHanded)
+weaponCategory SpikedShieldHeavy = (Martial, OneHanded)
+weaponCategory Trident           = (Martial, OneHanded)
+weaponCategory Warhammer         = (Martial, OneHanded)
+weaponCategory Falchion          = (Martial, TwoHanded)
+weaponCategory Glaive            = (Martial, TwoHanded)
+weaponCategory Greataxe          = (Martial, TwoHanded)
+weaponCategory Greatclub         = (Martial, TwoHanded)
+weaponCategory FlailHeavy        = (Martial, TwoHanded)
+weaponCategory Greatsword        = (Martial, TwoHanded)
+weaponCategory Guisarme          = (Martial, TwoHanded)
+weaponCategory Halberd           = (Martial, TwoHanded)
+weaponCategory Lance             = (Martial, TwoHanded)
+weaponCategory Ranseur           = (Martial, TwoHanded)
+weaponCategory Scythe            = (Martial, TwoHanded)
+weaponCategory Longbow           = (Martial, Ranged)
+weaponCategory LongbowComposite  = (Martial, Ranged)
+weaponCategory Shortbow          = (Martial, Ranged)
+weaponCategory ShortbowComposite = (Martial, Ranged)
+weaponCategory Kama              = (Exotic, Light)
+
+data ArmorType = ArmorLight
+               | ArmorMedium
+               | ArmorHeavy
+               deriving (Show)
+
 data ItemType = Weapon WeaponType
-              | Chest
+              | Chest ArmorType
               | Gloves
               | Boots
               | Cloak
@@ -169,19 +241,23 @@ data Paperdoll = Paperdoll { _mainHand :: Maybe Item
                            , _back     :: Maybe Item }
 
 -- TODO change attackModifier based on equipped weapon
+-- TODO track bonus feats
+-- TODO track bonus stats
 data Player = Player { _name           :: Text
-                     , _race           :: Race         -- ^ player race
-                     , _xp             :: Int          -- ^ experience points
-                     , _hp             :: Int          -- ^ total max HP
-                     , _ac             :: Int          -- ^ armor class
-                     , _initiative     :: Int          -- ^ base initiative
-                     , _stats          :: Stats        -- ^ ability scores
-                     , _attackModifier :: Stat         -- ^ ability modifier to use for attack calculations
-                     , _skills         :: Skills       -- ^ skills
-                     , _equipped       :: Paperdoll    -- ^ all equipped items
-                     , _spells         :: [Spell]      -- ^ known spells
-                     , _levels         :: [LevelClass] -- ^ levels
-                     , _feats          :: [Feat] }     -- ^ feats
+                     , _race           :: Race          -- ^ player race
+                     , _xp             :: Int           -- ^ experience points
+                     , _hp             :: Int           -- ^ total max HP
+                     , _ac             :: Int           -- ^ armor class
+                     , _initiative     :: Int           -- ^ base initiative
+                     , _stats          :: Stats         -- ^ ability scores
+                     , _attackModifier :: Stat          -- ^ ability modifier to use for attack calculations
+                     , _skills         :: Skills        -- ^ skills
+                     , _equipped       :: Paperdoll     -- ^ all equipped items
+                     , _spells         :: [Spell]       -- ^ known spells
+                     , _levels         :: [LevelClass]  -- ^ levels
+                     , _feats          :: [Feat]        -- ^ feats
+                     , _proficiencies  :: [Proficiency] -- ^ proficiencies
+                     }
 
 type PlayerRollerT = ReaderT Player (Free Roller)
 type PlayerRoller  = PlayerRollerT Int
@@ -231,12 +307,12 @@ makeLenses ''Item
 makeLenses ''Paperdoll
 
 statToLens :: Stat -> Getter Stats Int
-statToLens Strength = strength
-statToLens Dexterity = dexterity
+statToLens Strength     = strength
+statToLens Dexterity    = dexterity
 statToLens Constitution = constitution
 statToLens Intelligence = intelligence
-statToLens Wisdom = wisdom
-statToLens Charisma = charisma
+statToLens Wisdom       = wisdom
+statToLens Charisma     = charisma
 
 -- | Get attack bonus for the specified player
 attackBonus :: Player -> Int

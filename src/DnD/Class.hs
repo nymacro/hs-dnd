@@ -10,13 +10,18 @@ import           Control.Lens
 barbarian :: Class
 barbarian = Class "Barbarian" 12 $ \level ->
   case level of
-    1 -> (feats <>~ [alertness, combatReflexes]) .
-        (stats . strength +~ 2) -- not real
+    1 -> (feats <>~ defaultFeats) .
+         (stats . strength +~ 2) -- not a real feature of the class...
     _ -> id
+  where defaultFeats = [ simpleWeaponProficiency
+                       , martialWeaponProficiency
+                       , lightArmorProficiency
+                       , mediumArmorProficiency
+                       , shieldProficiency ]
 
 wizard :: Class
 wizard = Class "Wizard" 4 $ \level ->
   case level of
     1 -> (spells <>~ [readMagic]) .
-        (feats  <>~ [scribeScroll])
+         (feats  <>~ [scribeScroll])
     _ -> id
