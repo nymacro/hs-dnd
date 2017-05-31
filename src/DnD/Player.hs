@@ -7,15 +7,17 @@
 {-# LANGUAGE TemplateHaskell     #-}
 module DnD.Player where
 
-import           Control.Lens         hiding (levels)
+import           Control.Lens          hiding (levels)
 import           Control.Monad
+import           Control.Monad.Cont
 import           Control.Monad.Free
 import           Control.Monad.Reader
 import           Control.Monad.State
 import           Data.Data
+import           Data.Functor.Identity
 import           Data.List
 import           Data.Monoid
-import           Data.Text            hiding (filter, foldr, length)
+import           Data.Text             hiding (filter, foldr, length)
 
 import           System.Random
 
@@ -240,6 +242,38 @@ data Paperdoll = Paperdoll { _mainHand :: Maybe Item
                            , _offHand  :: Maybe Item
                            , _back     :: Maybe Item }
 
+-- Some of these may not be true damage types
+data Damage = PhysicalBludgeoning
+            | PhysicalPiercing
+            | PhysicalSlashing
+            -- Magic damage types
+            | MagicForce
+            | MagicAcid
+            | MagicAir
+            | MagicChaotic
+            | MagicCold
+            | MagicDarkness
+            | MagicDeath
+            | MagicEarth
+            | MagicElectricity
+            | MagicEvil
+            | MagicFear
+            | MagicFire
+            | MagicGood
+            | MagicLawful
+            | MagicLight
+            | MagicSonic
+            | MagicWater
+            deriving (Show)
+
+type DamageApply = (Damage, Int, Player)
+type EffectApply = DamageApply -> ContT DamageApply Identity DamageApply
+
+data Effect = Effect { apply    :: EffectApply -- ^ effect
+                     , priority :: Int         -- ^ priority for ordering effects
+                     , expiry   :: Int         -- ^ turn expiry
+                     }
+
 -- TODO change attackModifier based on equipped weapon
 -- TODO track bonus feats
 -- TODO track bonus stats
@@ -256,7 +290,10 @@ data Player = Player { _name           :: Text
                      , _spells         :: [Spell]       -- ^ known spells
                      , _levels         :: [LevelClass]  -- ^ levels
                      , _feats          :: [Feat]        -- ^ feats
-                     , _proficiencies  :: [Proficiency] -- ^ proficiencies
+                     , _proficiencies  :: [Proficiency] -- ^ proficiencies for items
+                     -- effects should allow early exit with a specific value,
+                     -- which may be appropriate for using Cont
+                     , _effects        :: [EffectApply] -- ^ effect callbacks
                      }
 
 type PlayerRollerT = ReaderT Player (Free Roller)
@@ -314,18 +351,27 @@ statToLens Intelligence = intelligence
 statToLens Wisdom       = wisdom
 statToLens Charisma     = charisma
 
+-- | Apply damage to a player
+applyDamage :: Damage -- ^ damage type
+            -> Int    -- ^ damage amount
+            -> Player -- ^ target
+            -> Player -- ^ damaged target
+applyDamage t d p = hp -~ damage $ target
+  where go t d p ef = case ef of
+                        []     -> cont $ \_ -> (t, d, p)
+                        (x:xs) -> do
+                          (t', d', p') <- x (t, d, p)
+                          go t' d' p' xs
+        (_, damage, target) = flip runCont id $ go t d p (_effects p)
+
 -- | Get attack bonus for the specified player
 attackBonus :: Player -> Int
 attackBonus p = (modifier $ p ^. stats) ^. statToLens (_attackModifier p)
 
+
 instance Eq Class where
   a == b = _className a == _className b &&
           _hitDie a    == _hitDie b
-
--- TODO find a nice way to do this...
-instance Num Skills where
-  a + b = (acrobatics +~ (b ^. acrobatics)) a
-  a - b = (acrobatics -~ (b ^. acrobatics)) a
 
 instance Show Race where
   show x = show $ x ^. raceName

@@ -12,6 +12,7 @@ import           DnD.Magic.Arcane
 import           DnD.Player
 import           DnD.Race
 
+import           Control.Monad.Cont
 import           Control.Monad.Reader
 import           Control.Monad.State
 import           Data.Monoid
@@ -78,6 +79,20 @@ main = do
 
   roller <- replicateM 50 $ runRoller $ roll 6 >> roll 6 >> plus 10
   print roller
+
+  let immunity :: EffectApply
+      immunity (t, d, p) = cont $ \r -> (t, 0, p)
+      doubleDamage :: EffectApply
+      doubleDamage (t, d, p) = cont $ \r -> r (t, d*2, p)
+      just10 :: EffectApply
+      just10 (t, d, p) = cont $ \r -> r (t, 10, p)
+      plus1 :: EffectApply
+      plus1 (t, d, p) = cont $ \r -> r (t, d+1, p)
+      barb'' = barb { _effects = [just10, plus1] }
+  print $ applyDamage MagicForce 10 barb''
+
+  let (barb''', _) = runIdentity $ runGameState gen $ castSpell magicMissile wiz barb''
+  print barb'''
 
   -- let x = runPlayerRoller p $ do
   --           roll 6

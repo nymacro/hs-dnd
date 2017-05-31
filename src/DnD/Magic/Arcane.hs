@@ -18,7 +18,10 @@ magicMissile = Spell "Magic Missile" Evocation 1 (MultiTarget targets) $ \caster
     let missiles = traceShowId $ 1 + (casterLevel caster - 1) `div` 2
         rolls    = Data.List.replicate missiles $ roll 4
     damages <- forM rolls runRollerState
-    return $ (hp -~ traceShowId (sum damages + 1)) target
+
+    -- this could be a lot better...
+    -- return $ (target ^. effects ^. applyDamage) MagicForce (sum damages + 1) target
+    return $ applyDamage MagicForce (sum damages + 1) target
   where targets = do
           x <- asks casterLevel
           plus $ min 5 $ 1 + max 1 ((x - 1) `div` 2)

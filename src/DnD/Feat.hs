@@ -8,7 +8,6 @@ import           Control.Lens
 alertness :: Feat
 alertness = Feat "Alertness" (const True) $ skills . acrobatics +~ 2
 
--- how to do this???
 simpleWeaponProficiency :: Feat
 simpleWeaponProficiency = Feat "Simple Weapon Proficiency" (const True) $
   proficiencies <>~ [\item -> case _itemType item of

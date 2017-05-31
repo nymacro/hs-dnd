@@ -4,6 +4,7 @@ module DnD.Default where
 import           DnD.Player
 import           DnD.Race
 
+import           Control.Lens
 import           Control.Monad
 import           Data.List     (sort)
 import           System.Random
@@ -39,4 +40,5 @@ mkPlayer = Player { _name   = "Player"
                   , _levels = []
                   , _equipped = mkPaperdoll
                   , _feats  = []
-                  , _proficiencies = [] }
+                  , _proficiencies = []
+                  , _effects = [] }
