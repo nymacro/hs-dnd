@@ -23,5 +23,11 @@ wizard :: Class
 wizard = Class "Wizard" 4 $ \level ->
   case level of
     1 -> (spells <>~ [readMagic]) .
-         (feats  <>~ [scribeScroll])
+         (feats  <>~ defaultFeats)
     _ -> id
+  where defaultFeats = [ scribeScroll
+                       , weaponProficiency Club
+                       , weaponProficiency Dagger
+                       , weaponProficiency CrossbowHeavy
+                       , weaponProficiency CrossbowLight
+                       , weaponProficiency Quarterstaff ]

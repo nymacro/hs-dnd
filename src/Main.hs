@@ -80,6 +80,7 @@ main = do
   roller <- replicateM 50 $ runRoller $ roll 6 >> roll 6 >> plus 10
   print roller
 
+  -- test out damage effect system
   let immunity :: EffectApply
       immunity (t, d, p) = cont $ \r -> (t, 0, p)
       doubleDamage :: EffectApply

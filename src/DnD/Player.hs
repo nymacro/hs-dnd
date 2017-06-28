@@ -76,22 +76,24 @@ data Feat = Feat { _featName   :: Text               -- ^ feat's name
                  , featAllowed :: Player -> Bool     -- ^ feat prerequisite
                  , applyFeat   :: Player -> Player } -- ^ feat's effect on a player
 
-hasFeatName :: Text -> Player -> Bool
-hasFeatName featName player = not $ Data.List.null $ filter (\x -> _featName x == featName) (_feats player)
+-- | Whether or not a player has a feat of the specified name.
+hasFeatByName :: Text -> Player -> Bool
+hasFeatByName featName player =
+  not $ Data.List.null $ filter (\x -> _featName x == featName) (_feats player)
 
 type Proficiency = Item -> Bool
 
 data WeaponCategory = Simple
                     | Martial
                     | Exotic
-                    deriving (Show)
+                    deriving (Show, Eq)
 
 data WeaponSubCategory = Unarmed
                        | Light
                        | OneHanded
                        | TwoHanded
                        | Ranged
-                       deriving (Show)
+                       deriving (Show, Eq)
 
 -- TODO martial/exotic
 data WeaponType = Gauntlet      -- ^ Simple Unarmed
@@ -147,7 +149,7 @@ data WeaponType = Gauntlet      -- ^ Simple Unarmed
                 | Shortbow      -- ^ Martial Ranged
                 | ShortbowComposite -- ^ Martial Ranged
                 | Kama          -- ^ Exotic Light
-                deriving (Show)
+                deriving (Show, Eq)
 
 isShield :: WeaponType -> Bool
 isShield ShieldLight       = True
@@ -264,9 +266,30 @@ data Damage = PhysicalBludgeoning
             | MagicLight
             | MagicSonic
             | MagicWater
-            deriving (Show)
+            deriving (Show, Eq)
 
+-- | Type of damage
+data DamageType = Physical
+                | Magical
+                deriving (Show, Eq)
+
+-- | Get damage type
+damageType :: Damage -> DamageType
+damageType d = if inList physical d
+                 then Physical
+                 else Magical
+  where inList [] z = False
+        inList (x:xs) z = if x == z
+                            then True
+                            else inList xs z
+        physical = [ PhysicalBludgeoning
+                   , PhysicalPiercing
+                   , PhysicalSlashing ]
+
+-- | Damage state for Effects
 type DamageApply = (Damage, Int, Player)
+
+-- | Effect (damage/healing) type
 type EffectApply = DamageApply -> ContT DamageApply Identity DamageApply
 
 data Effect = Effect { apply    :: EffectApply -- ^ effect
@@ -351,11 +374,25 @@ statToLens Intelligence = intelligence
 statToLens Wisdom       = wisdom
 statToLens Charisma     = charisma
 
+-- | Attempt to hit a player
+applyHit :: Damage
+         -> Int
+         -> Int
+         -> Player
+         -> Player
+applyHit t d h p =
+  case damageType t of
+    Physical -> if _ac p > h
+                  then p
+                  else applyDamage t d p
+    -- TODO apply the appropriate saving throw
+    Magical  -> applyDamage t d p
+
 -- | Apply damage to a player
-applyDamage :: Damage -- ^ damage type
-            -> Int    -- ^ damage amount
-            -> Player -- ^ target
-            -> Player -- ^ damaged target
+applyDamage :: Damage     -- ^ damage type
+            -> Int        -- ^ damage amount
+            -> Player     -- ^ target
+            -> Player     -- ^ damaged target
 applyDamage t d p = hp -~ damage $ target
   where go t d p ef = case ef of
                         []     -> cont $ \_ -> (t, d, p)
