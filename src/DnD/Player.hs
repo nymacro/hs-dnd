@@ -393,13 +393,15 @@ applyDamage :: Damage     -- ^ damage type
             -> Int        -- ^ damage amount
             -> Player     -- ^ target
             -> Player     -- ^ damaged target
-applyDamage t d p = hp -~ damage $ target
+applyDamage t d p =
+    traceShow debugMsg $ hp -~ damage $ target
   where go t d p ef = case ef of
                         []     -> cont $ \_ -> (t, d, p)
                         (x:xs) -> do
                           (t', d', p') <- x (t, d, p)
                           go t' d' p' xs
         (_, damage, target) = flip runCont id $ go t d p (_effects p)
+        debugMsg = show (target ^. name) ++ " takes " ++ show damage ++ " " ++ show t
 
 -- | Get attack bonus for the specified player
 attackBonus :: Player -> Int

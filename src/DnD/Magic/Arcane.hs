@@ -15,16 +15,22 @@ import           Debug.Trace
 -- num missiles:   (caster_level - 1) / 2
 magicMissile :: Spell
 magicMissile = Spell "Magic Missile" Evocation 1 (MultiTarget targets) $ \caster target -> do
-    let missiles = traceShowId $ 1 + (casterLevel caster - 1) `div` 2
-        rolls    = Data.List.replicate missiles $ roll 4
-    damages <- forM rolls runRollerState
+    let missiles = min 5 $ 1 + (casterLevel caster - 1) `div` 2
+        rolls    = roll 4 >> plus 1
+    damage <- runRollerState rolls
 
-    -- this could be a lot better...
-    -- return $ (target ^. effects ^. applyDamage) MagicForce (sum damages + 1) target
-    return $ applyDamage MagicForce (sum damages + 1) target
+    return $ applyDamage MagicForce damage target
   where targets = do
           x <- asks casterLevel
-          plus $ min 5 $ 1 + max 1 ((x - 1) `div` 2)
+          plus $ min 5 $ 1 + ((x - 1) `div` 2)
+
+burningHands :: Spell
+burningHands = Spell "Burning Hands" Evocation 1 Area $ \caster target -> do
+    let n = min 5 $ 1 + (casterLevel caster - 1) `div` 2
+        rolls = Data.List.replicate n $ roll 4
+    damage <- forM rolls runRollerState
+
+    return $ applyDamage MagicFire (sum damage) target
 
 -- TODO has no "player" effect, find out what to do!
 -- TODO only a level 0 spell for wiz/sor/brd/clr/drd

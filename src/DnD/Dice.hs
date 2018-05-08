@@ -1,15 +1,18 @@
 {-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE TemplateHaskell   #-}
 module DnD.Dice where
 
 import           Control.Monad.Free
 import           System.Random
+import           Text.Show.Deriving
 
 data Roller next = D Int next
                  | Plus Int next
                  | Minus Int next
                  deriving (Show)
+$(deriveShow1 ''Roller) -- why?
 
 instance Functor Roller where
   fmap f (D n next)     = D n (f next)

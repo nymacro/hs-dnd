@@ -23,4 +23,5 @@ executable hs-dnd
                      , free
                      , text
                      , template-haskell
+                     , deriving-compat
                      -- , gtk3
